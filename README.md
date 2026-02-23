@@ -11,7 +11,7 @@ Satori captures a user-selected screen region or reads an image file, sends it t
 - **Image file input** — translate any PNG/JPG/WebP file directly from the command line
 - **Wayland-native** — uses `slurp` for region selection, `grim` for screenshots, `gtk4-layer-shell` for the overlay
 - **In-memory processing** — screenshots never touch disk
-- **Multi-provider** — supports OpenRouter, DeepSeek, OpenAI, Ollama, and any OpenAI-compatible endpoint
+- **Multi-provider** — supports OpenRouter, Google Gemini, OpenAI, Anthropic Claude, xAI Grok, DeepSeek, Ollama, and any OpenAI-compatible endpoint
 - **i18n** — auto-detects system locale for default target language
 - **Translation styles** — context-aware prompts for manga, visual novels, games, or general use
 - **Interactive setup** — `satori init` wizard to create your config
@@ -20,6 +20,9 @@ Satori captures a user-selected screen region or reads an image file, sends it t
 - **Overlay controls** — screenshot, copy, prev/next buttons right in the overlay
 - **Optional GUI** — compile without GTK for lightweight server/terminal-only usage
 - **Customizable overlay** — position, font, colors, opacity
+- **Adaptive sizing** — overlay window auto-sizes to content, resizable by dragging edges
+- **Position memory** — overlay remembers drag position between sessions (dynamic mode)
+- **Low-memory mode** — optional Cairo software renderer to reduce GPU memory usage
 
 ## Requirements
 
@@ -147,6 +150,7 @@ satori completions fish > ~/.config/fish/completions/satori.fish
 - `Ctrl+C`: copy translation to clipboard
 - `📷` button: take a new screenshot
 - `◀` / `▶` buttons: browse translation history
+- Drag window to move, drag right/bottom edge to resize
 
 ### Compositor keybindings
 
@@ -187,6 +191,8 @@ font = "Noto Sans CJK SC"
 color = "#ffffff"
 background_color = "#1a1a2e"
 background_opacity = 0.85
+position_mode = "dynamic"
+# renderer = "cairo"  # uncomment for lower memory usage
 
 [profiles.openrouter]
 driver = "openai_compatible"
@@ -220,6 +226,8 @@ export SATORI_OPENROUTER_KEY="sk-your-key-here"
 | `color` | Default text color for overlay | System default |
 | `background_color` | Default background color for overlay | System default |
 | `background_opacity` | Default background opacity for overlay | `0.9` |
+| `position_mode` | `dynamic` (remember position) or `fixed` (reset each time) | `dynamic` |
+| `renderer` | GTK renderer: `auto` (GPU) or `cairo` (software, lower memory) | `auto` |
 
 ### Profile fields
 
