@@ -10,6 +10,7 @@ Satori captures a user-selected screen region or reads an image file, sends it t
 - **Dual output modes** — terminal (stdout) or floating Wayland overlay
 - **Image file input** — translate any PNG/JPG/WebP file directly from the command line
 - **Wayland-native** — uses `slurp` for region selection, `grim` for screenshots, `gtk4-layer-shell` for the overlay
+- **Alternative GUI** — optional Slint backend for environments without GTK4
 - **In-memory processing** — screenshots never touch disk
 - **Multi-provider** — supports OpenRouter, Google Gemini, OpenAI, Anthropic Claude, xAI Grok, DeepSeek, Ollama, and any OpenAI-compatible endpoint
 - **i18n** — auto-detects system locale for default target language
@@ -228,6 +229,7 @@ export SATORI_OPENROUTER_KEY="sk-your-key-here"
 | `background_opacity` | Default background opacity for overlay | `0.9` |
 | `position_mode` | `dynamic` (remember position) or `fixed` (reset each time) | `dynamic` |
 | `renderer` | GTK renderer: `auto` (GPU) or `cairo` (software, lower memory) | `auto` |
+| `gui_backend` | GUI framework: `gtk4` or `slint` | `gtk4` |
 
 ### Profile fields
 
@@ -243,24 +245,34 @@ export SATORI_OPENROUTER_KEY="sk-your-key-here"
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| `gui` | ✅ | GTK4 overlay, screenshot capture, layer-shell |
+| `gui` | ✅ | GTK4 overlay with layer-shell, screenshot capture |
+| `gui-slint` | ❌ | Slint overlay (no layer-shell, regular window) |
 
-Build without GUI for a lightweight terminal-only binary:
+Build variants:
 
 ```sh
+# Full GTK4 build (default, recommended for Wayland compositors)
+cargo build --release
+
+# Terminal-only (no GUI, no GTK/Slint dependencies)
 cargo build --release --no-default-features
+
+# Slint GUI backend (lighter than GTK4, but no layer-shell support)
+cargo build --release --no-default-features --features gui-slint
 ```
 
-This removes the dependency on GTK4, libadwaita, and gtk4-layer-shell. The resulting binary only supports `satori <IMAGE>` with terminal output.
+> **Note:** The Slint backend renders as a regular window, not a Wayland layer-shell overlay.
+> It may be covered by other windows on most compositors. Choose GTK4 for best overlay behavior.
 
 ## Building
 
 ```sh
-cargo build                          # debug build (with GUI)
-cargo build --release                # release build
-cargo build --no-default-features    # terminal-only build
-cargo test                           # run tests
-cargo clippy -- -D warnings          # lint
+cargo build                                            # debug build (with GTK4 GUI)
+cargo build --release                                  # release build
+cargo build --no-default-features                      # terminal-only build
+cargo build --no-default-features --features gui-slint # Slint GUI build
+cargo test                                             # run tests
+cargo clippy -- -D warnings                            # lint
 ```
 
 ## License
