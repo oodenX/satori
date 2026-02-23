@@ -5,9 +5,11 @@ mod i18n;
 mod init;
 #[cfg(feature = "gui")]
 mod overlay;
+#[cfg(feature = "gui-slint")]
+mod overlay_slint;
 mod prompt;
 mod provider;
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "gui-slint"))]
 mod screenshot;
 mod translate;
 
@@ -130,11 +132,11 @@ fn run_terminal(
             std::fs::read(path).with_context(|| format!("Failed to read image file: {path}"))?
         }
         None => {
-            #[cfg(feature = "gui")]
+            #[cfg(any(feature = "gui", feature = "gui-slint"))]
             {
                 screenshot::take_screenshot().context("Screenshot capture failed")?
             }
-            #[cfg(not(feature = "gui"))]
+            #[cfg(not(any(feature = "gui", feature = "gui-slint")))]
             {
                 anyhow::bail!(
                     "No image file specified and GUI feature is disabled.\n\
@@ -167,7 +169,7 @@ fn run_terminal(
     Ok(())
 }
 
-#[cfg(feature = "gui")]
+#[cfg(any(feature = "gui", feature = "gui-slint"))]
 fn run_overlay(
     cli: Cli,
     provider: provider::AnyProvider,
@@ -183,32 +185,60 @@ fn run_overlay(
         None => None, // will screenshot in overlay
     };
 
-    let ui_opacity = settings.map(|s| s.ui_opacity).unwrap_or(0.9);
+    // Route to Slint backend if configured and compiled in
+    #[cfg(feature = "gui-slint")]
+    {
+        let gui_backend = settings.map(|s| s.gui_backend.as_str()).unwrap_or("gtk4");
+        if gui_backend == "slint" || !cfg!(feature = "gui") {
+            overlay_slint::run(provider, target_lang, style, image_data);
+            return Ok(());
+        }
+    }
 
-    let overlay_config = overlay::OverlayConfig {
-        target_lang,
-        translation_style: style,
-        ui_opacity,
-        position,
-        font: cli.font.or(settings.and_then(|s| s.font.clone())),
-        color: cli.color.or(settings.and_then(|s| s.color.clone())),
-        background_color: cli
-            .background_color
-            .or(settings.and_then(|s| s.background_color.clone())),
-        background_opacity: cli
-            .background_opacity
-            .or(settings.and_then(|s| s.background_opacity)),
-        image_data,
-        last_margins: settings
-            .filter(|s| s.position_mode == "dynamic")
-            .and_then(|s| s.last_margins),
-    };
+    // Otherwise use GTK4
+    #[cfg(feature = "gui")]
+    {
+        let ui_opacity = settings.map(|s| s.ui_opacity).unwrap_or(0.9);
 
-    overlay::run(provider, overlay_config);
+        let overlay_config = overlay::OverlayConfig {
+            target_lang,
+            translation_style: style,
+            ui_opacity,
+            position,
+            font: cli.font.or(settings.and_then(|s| s.font.clone())),
+            color: cli.color.or(settings.and_then(|s| s.color.clone())),
+            background_color: cli
+                .background_color
+                .or(settings.and_then(|s| s.background_color.clone())),
+            background_opacity: cli
+                .background_opacity
+                .or(settings.and_then(|s| s.background_opacity)),
+            image_data,
+            last_margins: settings
+                .filter(|s| s.position_mode == "dynamic")
+                .and_then(|s| s.last_margins),
+        };
+
+        overlay::run(provider, overlay_config);
+        return Ok(());
+    }
+
+    // Neither backend compiled in (shouldn't reach here due to cfg gate, but just in case)
+    #[cfg(not(feature = "gui"))]
+    {
+        let _ = (image_data, position);
+        anyhow::bail!(
+            "GUI backend 'gtk4' not compiled. Rebuild with --features gui, \
+             or set gui_backend = \"slint\" in config."
+        );
+    }
+
+    #[cfg(feature = "gui")]
+    #[allow(unreachable_code)]
     Ok(())
 }
 
-#[cfg(not(feature = "gui"))]
+#[cfg(not(any(feature = "gui", feature = "gui-slint")))]
 fn run_overlay(
     _cli: Cli,
     _provider: provider::AnyProvider,
@@ -218,8 +248,9 @@ fn run_overlay(
     _settings: Option<&config::Settings>,
 ) -> Result<()> {
     anyhow::bail!(
-        "Overlay mode requires the 'gui' feature.\n\
-         Rebuild with: cargo build --features gui\n\
+        "Overlay mode requires a GUI feature.\n\
+         Rebuild with: cargo build --features gui       (GTK4)\n\
+         Or:           cargo build --features gui-slint (Slint)\n\
          Or use terminal mode: satori <IMAGE> --output terminal"
     );
 }
