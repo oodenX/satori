@@ -10,6 +10,7 @@ readme = "README.md"
 [features]
 default = ["gui"]
 gui = ["dep:gtk4", "dep:gtk4-layer-shell", "dep:libadwaita", "dep:libc"]
+gui-slint = ["dep:slint", "dep:slint-build", "dep:libc"]
 
 [dependencies]
 anyhow = "1"
@@ -23,9 +24,13 @@ libadwaita = { version = "0.7", optional = true }
 reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+slint = { version = "1", optional = true, default-features = false, features = ["std", "compat-1-2", "backend-winit-wayland", "renderer-femtovg", "renderer-software"] }
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 toml = "0.8"
+
+[build-dependencies]
+slint-build = { version = "1", optional = true }
 
 [package.metadata.deb]
 depends = "libgtk-4-1, libadwaita-1-0, libgtk4-layer-shell0, slurp, grim"
