@@ -41,6 +41,10 @@ pub struct Settings {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background_opacity: Option<f64>,
+    /// GTK renderer: "auto" (default) or "cairo" (lower memory)
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub renderer: Option<String>,
 }
 
 fn default_target_lang() -> String {
@@ -145,6 +149,7 @@ pub fn save_last_pos(pos: Position, margins: Option<[i32; 4]>) -> Result<()> {
             color: None,
             background_color: None,
             background_opacity: None,
+            renderer: None,
         },
         profiles: HashMap::new(),
     });

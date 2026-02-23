@@ -64,6 +64,16 @@ fn main() -> Result<()> {
 
     let settings = config.as_ref().map(|c| &c.settings);
 
+    // Apply renderer setting before any GTK initialization
+    #[cfg(feature = "gui")]
+    if let Some(renderer) = settings.and_then(|s| s.renderer.as_deref())
+        && renderer == "cairo"
+        && std::env::var_os("GSK_RENDERER").is_none()
+    {
+        // SAFETY: called before any other threads are spawned and before GTK init
+        unsafe { std::env::set_var("GSK_RENDERER", "cairo") };
+    }
+
     // Resolve profile name: CLI --profile > config active_profile
     let profile_name = cli
         .profile

@@ -227,6 +227,24 @@ pub fn run_init() -> Result<()> {
     };
     println!("  → {}\n", POSITIONS[pos_idx].1);
 
+    // 7. GTK renderer (memory optimization)
+    println!("🖥  GTK Renderer:");
+    println!("  1: Auto (default — uses GPU via Vulkan/OpenGL)");
+    println!("  2: Cairo (software — lower memory, slightly higher CPU)");
+    print!("\nSelect renderer [default: 1]: ");
+    io::stdout().flush()?;
+    let renderer_input = read_line()?;
+    let renderer = match renderer_input.trim() {
+        "2" => {
+            println!("  → Cairo (software renderer)\n");
+            Some("cairo".to_string())
+        }
+        _ => {
+            println!("  → Auto (GPU renderer)\n");
+            None
+        }
+    };
+
     // Build config
     let profile_name = preset
         .name
@@ -257,6 +275,7 @@ pub fn run_init() -> Result<()> {
             color: None,
             background_color: None,
             background_opacity: None,
+            renderer,
         },
         profiles,
     };
