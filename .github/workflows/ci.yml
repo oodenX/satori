@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  core:
+    name: Core (no GUI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt
+        run: cargo fmt -- --check
+
+      - name: cargo check (no GUI)
+        run: cargo check --no-default-features
+
+      - name: cargo clippy (no GUI)
+        run: cargo clippy --no-default-features -- -D warnings
+
+      - name: cargo test
+        run: cargo test --no-default-features
+
+  gui:
+    name: GUI build check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev libwayland-dev meson ninja-build
+
+      - name: Build gtk4-layer-shell from source
+        run: |
+          git clone --depth 1 --branch v1.0.4 https://github.com/wmww/gtk4-layer-shell.git /tmp/gtk4-layer-shell
+          cd /tmp/gtk4-layer-shell
+          meson setup build -Dexamples=false -Ddocs=false -Dtests=false -Dintrospection=false -Dvapi=false
+          ninja -C build
+          sudo ninja -C build install
+          sudo ldconfig
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo check (with GUI)
+        run: cargo check
+
+      - name: cargo clippy (with GUI)
+        run: cargo clippy -- -D warnings
