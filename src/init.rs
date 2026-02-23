@@ -12,15 +12,25 @@ struct ProviderPreset {
     base_url: &'static str,
     default_model: &'static str,
     api_key_env: Option<&'static str>,
+    note: &'static str,
 }
 
 const PRESETS: &[ProviderPreset] = &[
     ProviderPreset {
-        name: "OpenRouter",
+        name: "OpenRouter (aggregator, many models)",
         driver: "openai_compatible",
         base_url: "https://openrouter.ai/api/v1",
         default_model: "google/gemini-2.5-flash",
         api_key_env: Some("SATORI_OPENROUTER_KEY"),
+        note: "Vision ✓ — Access 200+ models via one API key",
+    },
+    ProviderPreset {
+        name: "Google Gemini",
+        driver: "openai_compatible",
+        base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
+        default_model: "gemini-2.5-flash",
+        api_key_env: Some("SATORI_GEMINI_KEY"),
+        note: "Vision ✓ — Free tier available, excellent multimodal",
     },
     ProviderPreset {
         name: "OpenAI",
@@ -28,6 +38,23 @@ const PRESETS: &[ProviderPreset] = &[
         base_url: "https://api.openai.com/v1",
         default_model: "gpt-4o",
         api_key_env: Some("SATORI_OPENAI_KEY"),
+        note: "Vision ✓ — gpt-4o, gpt-4o-mini support images",
+    },
+    ProviderPreset {
+        name: "Anthropic Claude",
+        driver: "openai_compatible",
+        base_url: "https://api.anthropic.com/v1",
+        default_model: "claude-sonnet-4-20250514",
+        api_key_env: Some("SATORI_ANTHROPIC_KEY"),
+        note: "Vision ✓ — Excellent translation quality",
+    },
+    ProviderPreset {
+        name: "xAI Grok",
+        driver: "openai_compatible",
+        base_url: "https://api.x.ai/v1",
+        default_model: "grok-2-vision-1212",
+        api_key_env: Some("SATORI_XAI_KEY"),
+        note: "Vision ✓ — Use grok-2-vision model for images",
     },
     ProviderPreset {
         name: "DeepSeek",
@@ -35,6 +62,7 @@ const PRESETS: &[ProviderPreset] = &[
         base_url: "https://api.deepseek.com/v1",
         default_model: "deepseek-chat",
         api_key_env: Some("SATORI_DEEPSEEK_KEY"),
+        note: "⚠ Vision ✗ — deepseek-chat is text-only; use via OpenRouter for vision models",
     },
     ProviderPreset {
         name: "Ollama (local)",
@@ -42,6 +70,7 @@ const PRESETS: &[ProviderPreset] = &[
         base_url: "http://localhost:11434",
         default_model: "llava",
         api_key_env: None,
+        note: "Vision ✓ — llava, llava-llama3, minicpm-v support images",
     },
 ];
 
@@ -119,6 +148,7 @@ pub fn run_init() -> Result<()> {
     println!("🤖 LLM Provider:");
     for (i, preset) in PRESETS.iter().enumerate() {
         println!("  {}: {}", i + 1, preset.name);
+        println!("     {}", preset.note);
     }
     print!("\nSelect provider [default: 1]: ");
     io::stdout().flush()?;
@@ -197,12 +227,49 @@ pub fn run_init() -> Result<()> {
     };
     println!("  → {}\n", POSITIONS[pos_idx].1);
 
+    // 7. Position mode
+    println!("🔄 Position mode:");
+    println!("  1: Dynamic (default — remember last position between sessions)");
+    println!("  2: Fixed (reset to default position each time)");
+    print!("\nSelect position mode [default: 1]: ");
+    io::stdout().flush()?;
+    let mode_input = read_line()?;
+    let position_mode = match mode_input.trim() {
+        "2" => {
+            println!("  → Fixed position\n");
+            "fixed".to_string()
+        }
+        _ => {
+            println!("  → Dynamic position\n");
+            "dynamic".to_string()
+        }
+    };
+
+    // 8. GTK renderer (memory optimization)
+    println!("🖥  GTK Renderer:");
+    println!("  1: Auto (default — uses GPU via Vulkan/OpenGL)");
+    println!("  2: Cairo (software — lower memory, slightly higher CPU)");
+    print!("\nSelect renderer [default: 1]: ");
+    io::stdout().flush()?;
+    let renderer_input = read_line()?;
+    let renderer = match renderer_input.trim() {
+        "2" => {
+            println!("  → Cairo (software renderer)\n");
+            Some("cairo".to_string())
+        }
+        _ => {
+            println!("  → Auto (GPU renderer)\n");
+            None
+        }
+    };
+
     // Build config
     let profile_name = preset
         .name
-        .to_lowercase()
-        .replace(' ', "_")
-        .replace("_(local)", "");
+        .split_once(' ')
+        .map(|(first, _)| first)
+        .unwrap_or(preset.name)
+        .to_lowercase();
     let profile = Profile {
         driver: preset.driver.to_string(),
         api_key_env,
@@ -226,6 +293,8 @@ pub fn run_init() -> Result<()> {
             color: None,
             background_color: None,
             background_opacity: None,
+            renderer,
+            position_mode,
         },
         profiles,
     };

@@ -64,6 +64,16 @@ fn main() -> Result<()> {
 
     let settings = config.as_ref().map(|c| &c.settings);
 
+    // Apply renderer setting before any GTK initialization
+    #[cfg(feature = "gui")]
+    if let Some(renderer) = settings.and_then(|s| s.renderer.as_deref())
+        && renderer == "cairo"
+        && std::env::var_os("GSK_RENDERER").is_none()
+    {
+        // SAFETY: called before any other threads are spawned and before GTK init
+        unsafe { std::env::set_var("GSK_RENDERER", "cairo") };
+    }
+
     // Resolve profile name: CLI --profile > config active_profile
     let profile_name = cli
         .profile
@@ -189,7 +199,9 @@ fn run_overlay(
             .background_opacity
             .or(settings.and_then(|s| s.background_opacity)),
         image_data,
-        last_margins: settings.and_then(|s| s.last_margins),
+        last_margins: settings
+            .filter(|s| s.position_mode == "dynamic")
+            .and_then(|s| s.last_margins),
     };
 
     overlay::run(provider, overlay_config);

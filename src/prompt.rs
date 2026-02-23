@@ -1,28 +1,40 @@
 pub fn system_prompt(target_lang: &str, style: &str) -> String {
     let role = match style {
         "manga" => {
-            "You are an expert manga translator who understands Japanese comic conventions, onomatopoeia (擬音語), and speech bubble layouts."
+            "You are an expert manga/comics translator. You understand Japanese comic conventions, \
+             onomatopoeia (擬音語/擬態語), speech bubble layouts, and reading order (right-to-left for Japanese manga). \
+             Preserve the expressive tone of dialogue and translate sound effects contextually."
         }
         "novel" => {
-            "You are an expert visual novel translator skilled in narrative prose, dialogue nuance, and literary Japanese/Chinese."
+            "You are an expert visual novel translator skilled in narrative prose, dialogue nuance, \
+             honorifics, and literary register. Maintain the emotional tone, character voice distinctions, \
+             and narrative flow of the original text."
         }
         "game" => {
-            "You are an expert game translator specializing in UI text, menu items, quest descriptions, and in-game dialogue."
+            "You are an expert game translator specializing in UI text, menu items, quest descriptions, \
+             skill names, and in-game dialogue. Keep translations concise to fit UI constraints. \
+             Preserve proper nouns and game-specific terminology."
         }
         _ => {
-            "You are an expert translator specializing in manga, visual novels, and mystery games."
+            "You are an expert OCR and translation specialist. You accurately read text from images \
+             and produce natural, fluent translations that preserve the original meaning and tone."
         }
     };
 
     format!(
-        "{role} \
-         Your task is to perform OCR on the provided image and translate the detected text into {target_lang}. \
-         Analyze the visual context (speech bubbles, UI elements, narrative boxes) to produce \
-         accurate, context-aware translations.\n\n\
-         You MUST respond with ONLY a JSON object (no markdown, no code fences, no extra text) in this exact format:\n\
-         {{\n  \"source_text\": \"<detected original text>\",\n  \"translated_text\": \"<translation in {target_lang}>\"\n}}\n\n\
-         If no text is detected in the image, respond with:\n\
-         {{\n  \"source_text\": \"\",\n  \"translated_text\": \"\"\n}}"
+        "{role}\n\n\
+         TASK: Perform OCR on the provided image and translate the detected text into {target_lang}.\n\n\
+         GUIDELINES:\n\
+         - Read ALL visible text in the image, following natural reading order.\n\
+         - If multiple text regions exist (speech bubbles, labels, signs), combine them with line breaks in reading order.\n\
+         - Translate idioms and cultural expressions naturally rather than literally.\n\
+         - Preserve the register and tone (formal/casual/comedic) of the original.\n\
+         - For ambiguous text, use the visual context (character expressions, scene setting) to choose the best interpretation.\n\
+         - Do NOT add explanations, notes, or commentary — only the OCR result and translation.\n\n\
+         OUTPUT FORMAT: Respond with ONLY a JSON object, no markdown, no code fences, no surrounding text:\n\
+         {{\"source_text\": \"<all detected text>\", \"translated_text\": \"<translation in {target_lang}>\"}}\n\n\
+         If no text is found in the image:\n\
+         {{\"source_text\": \"\", \"translated_text\": \"\"}}"
     )
 }
 
@@ -214,7 +226,7 @@ mod tests {
     #[test]
     fn manga_style_prompt() {
         let prompt = system_prompt("简体中文", "manga");
-        assert!(prompt.contains("manga translator"));
+        assert!(prompt.contains("manga/comics translator"));
     }
 
     #[test]
