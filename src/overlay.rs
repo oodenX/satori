@@ -190,8 +190,8 @@ pub fn run(provider: AnyProvider, config: OverlayConfig) {
         {
             let fm = Arc::clone(&final_margins);
             window.connect_close_request(move |w| {
-                use gtk4_layer_shell::LayerShell;
                 use gtk4_layer_shell::Edge;
+                use gtk4_layer_shell::LayerShell;
                 let margins = [
                     w.margin(Edge::Top),
                     w.margin(Edge::Bottom),
@@ -315,10 +315,8 @@ pub fn run(provider: AnyProvider, config: OverlayConfig) {
                             let style_t = style.clone();
                             let (tx, rx) = std::sync::mpsc::channel();
                             std::thread::spawn(move || {
-                                let rt =
-                                    tokio::runtime::Runtime::new().expect("tokio runtime");
-                                let result =
-                                    rt.block_on(prov.translate(&img, &lang_t, &style_t));
+                                let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+                                let result = rt.block_on(prov.translate(&img, &lang_t, &style_t));
                                 let _ = tx.send(result);
                             });
 
@@ -473,11 +471,7 @@ fn build_window(app: &adw::Application, config: &OverlayConfig) -> adw::Applicat
 }
 
 #[cfg(feature = "gui")]
-fn apply_position(
-    window: &adw::ApplicationWindow,
-    pos: Position,
-    saved_margins: Option<[i32; 4]>,
-) {
+fn apply_position(window: &adw::ApplicationWindow, pos: Position, saved_margins: Option<[i32; 4]>) {
     use gtk4_layer_shell::Edge;
     let default_margin = 20;
     match pos {
