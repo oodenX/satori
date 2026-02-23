@@ -1,0 +1,269 @@
+use std::io::{self, Write};
+
+use anyhow::{Context, Result};
+
+use crate::config::{self, AppConfig, Profile, Settings};
+use crate::i18n;
+
+/// Provider presets for interactive selection.
+struct ProviderPreset {
+    name: &'static str,
+    driver: &'static str,
+    base_url: &'static str,
+    default_model: &'static str,
+    api_key_env: Option<&'static str>,
+}
+
+const PRESETS: &[ProviderPreset] = &[
+    ProviderPreset {
+        name: "OpenRouter",
+        driver: "openai_compatible",
+        base_url: "https://openrouter.ai/api/v1",
+        default_model: "google/gemini-2.5-flash",
+        api_key_env: Some("SATORI_OPENROUTER_KEY"),
+    },
+    ProviderPreset {
+        name: "OpenAI",
+        driver: "openai_compatible",
+        base_url: "https://api.openai.com/v1",
+        default_model: "gpt-4o",
+        api_key_env: Some("SATORI_OPENAI_KEY"),
+    },
+    ProviderPreset {
+        name: "DeepSeek",
+        driver: "openai_compatible",
+        base_url: "https://api.deepseek.com/v1",
+        default_model: "deepseek-chat",
+        api_key_env: Some("SATORI_DEEPSEEK_KEY"),
+    },
+    ProviderPreset {
+        name: "Ollama (local)",
+        driver: "ollama",
+        base_url: "http://localhost:11434",
+        default_model: "llava",
+        api_key_env: None,
+    },
+];
+
+const STYLES: &[(&str, &str)] = &[
+    ("general", "General purpose translation"),
+    ("manga", "Manga / Comics (onomatopoeia, speech bubbles)"),
+    ("novel", "Visual novels (narrative, dialogue)"),
+    ("game", "Games (UI, menus, quests)"),
+];
+
+const POSITIONS: &[(&str, &str)] = &[
+    ("bottom-right", "Bottom right (default)"),
+    ("bottom-left", "Bottom left"),
+    ("top-right", "Top right"),
+    ("top-left", "Top left"),
+    ("center", "Center"),
+];
+
+/// Run the interactive `satori init` wizard.
+pub fn run_init() -> Result<()> {
+    println!("🔧 Satori Configuration Wizard\n");
+
+    if config::config_exists() {
+        print!("⚠  Config file already exists. Overwrite? [y/N] ");
+        io::stdout().flush()?;
+        let answer = read_line()?;
+        if !answer.trim().eq_ignore_ascii_case("y") {
+            println!("Aborted.");
+            return Ok(());
+        }
+        println!();
+    }
+
+    // 1. Target language
+    let detected = i18n::detect_target_lang();
+    println!("📝 Available target languages:");
+    for (i, (_, name)) in i18n::LANGUAGES.iter().enumerate() {
+        let marker = if *name == detected { " (detected)" } else { "" };
+        println!("  {}: {}{}", i + 1, name, marker);
+    }
+    print!("\nSelect target language [default: {}]: ", detected);
+    io::stdout().flush()?;
+    let lang_input = read_line()?;
+    let target_lang = if lang_input.trim().is_empty() {
+        detected
+    } else if let Ok(idx) = lang_input.trim().parse::<usize>() {
+        if idx >= 1 && idx <= i18n::LANGUAGES.len() {
+            i18n::LANGUAGES[idx - 1].1.to_string()
+        } else {
+            lang_input.trim().to_string()
+        }
+    } else {
+        lang_input.trim().to_string()
+    };
+    println!("  → {}\n", target_lang);
+
+    // 2. Translation style
+    println!("🎨 Translation styles:");
+    for (i, (_, desc)) in STYLES.iter().enumerate() {
+        println!("  {}: {}", i + 1, desc);
+    }
+    print!("\nSelect style [default: 1]: ");
+    io::stdout().flush()?;
+    let style_input = read_line()?;
+    let style_idx = style_input
+        .trim()
+        .parse::<usize>()
+        .unwrap_or(1)
+        .saturating_sub(1)
+        .min(STYLES.len() - 1);
+    let translation_style = STYLES[style_idx].0.to_string();
+    println!("  → {}\n", STYLES[style_idx].1);
+
+    // 3. Provider
+    println!("🤖 LLM Provider:");
+    for (i, preset) in PRESETS.iter().enumerate() {
+        println!("  {}: {}", i + 1, preset.name);
+    }
+    print!("\nSelect provider [default: 1]: ");
+    io::stdout().flush()?;
+    let provider_input = read_line()?;
+    let preset_idx = provider_input
+        .trim()
+        .parse::<usize>()
+        .unwrap_or(1)
+        .saturating_sub(1)
+        .min(PRESETS.len() - 1);
+    let preset = &PRESETS[preset_idx];
+    println!("  → {}\n", preset.name);
+
+    // 4. Model
+    print!("🧠 Model name [default: {}]: ", preset.default_model);
+    io::stdout().flush()?;
+    let model_input = read_line()?;
+    let model = if model_input.trim().is_empty() {
+        preset.default_model.to_string()
+    } else {
+        model_input.trim().to_string()
+    };
+    println!("  → {}\n", model);
+
+    // 5. API key (cloud only)
+    let api_key_env = if let Some(default_env) = preset.api_key_env {
+        print!(
+            "🔑 Environment variable for API key [default: {}]: ",
+            default_env
+        );
+        io::stdout().flush()?;
+        let key_input = read_line()?;
+        let env_name = if key_input.trim().is_empty() {
+            default_env.to_string()
+        } else {
+            key_input.trim().to_string()
+        };
+
+        // Check if the env var is set
+        if std::env::var(&env_name).is_err() {
+            println!(
+                "\n  ⚠  ${} is not set. Remember to set it before running satori:",
+                env_name
+            );
+            println!("     export {}=\"your-api-key-here\"\n", env_name);
+        } else {
+            println!("  → {} ✓\n", env_name);
+        }
+        Some(env_name)
+    } else {
+        println!("  ℹ  No API key needed for local Ollama.\n");
+        None
+    };
+
+    // 6. Default overlay position
+    println!("📍 Default overlay position:");
+    for (i, (_, desc)) in POSITIONS.iter().enumerate() {
+        println!("  {}: {}", i + 1, desc);
+    }
+    print!("\nSelect position [default: 1]: ");
+    io::stdout().flush()?;
+    let pos_input = read_line()?;
+    let pos_idx = pos_input
+        .trim()
+        .parse::<usize>()
+        .unwrap_or(1)
+        .saturating_sub(1)
+        .min(POSITIONS.len() - 1);
+    let last_pos_str = POSITIONS[pos_idx].0;
+    let last_pos: crate::cli::Position = match last_pos_str {
+        "bottom-left" => crate::cli::Position::BottomLeft,
+        "top-right" => crate::cli::Position::TopRight,
+        "top-left" => crate::cli::Position::TopLeft,
+        "center" => crate::cli::Position::Center,
+        _ => crate::cli::Position::BottomRight,
+    };
+    println!("  → {}\n", POSITIONS[pos_idx].1);
+
+    // Build config
+    let profile_name = preset
+        .name
+        .to_lowercase()
+        .replace(' ', "_")
+        .replace("_(local)", "");
+    let profile = Profile {
+        driver: preset.driver.to_string(),
+        api_key_env,
+        base_url: preset.base_url.to_string(),
+        model,
+        timeout_sec: 15,
+    };
+
+    let mut profiles = std::collections::HashMap::new();
+    profiles.insert(profile_name.clone(), profile);
+
+    let config = AppConfig {
+        settings: Settings {
+            active_profile: profile_name,
+            target_lang,
+            translation_style,
+            ui_opacity: 0.9,
+            last_pos: Some(last_pos),
+            last_margins: None,
+            font: None,
+            color: None,
+            background_color: None,
+            background_opacity: None,
+        },
+        profiles,
+    };
+
+    // Serialize and show preview
+    let toml_str = toml::to_string_pretty(&config).context("Failed to serialize config")?;
+
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("{}", toml_str);
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    print!("\nSave this configuration? [Y/n] ");
+    io::stdout().flush()?;
+    let confirm = read_line()?;
+    if confirm.trim().eq_ignore_ascii_case("n") {
+        println!("Aborted.");
+        return Ok(());
+    }
+
+    // Write config
+    let config_dir = config::config_dir();
+    std::fs::create_dir_all(&config_dir)
+        .with_context(|| format!("Failed to create {}", config_dir.display()))?;
+
+    let config_path = config_dir.join("config.toml");
+    std::fs::write(&config_path, &toml_str)
+        .with_context(|| format!("Failed to write {}", config_path.display()))?;
+
+    println!("\n✅ Config saved to {}", config_path.display());
+    println!("\nRun `satori` to start translating!");
+
+    Ok(())
+}
+
+fn read_line() -> Result<String> {
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .context("Failed to read input")?;
+    Ok(input)
+}
