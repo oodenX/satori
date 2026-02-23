@@ -45,6 +45,9 @@ pub struct Settings {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub renderer: Option<String>,
+    /// Position mode: "dynamic" (remember last position) or "fixed" (reset each time)
+    #[serde(default = "default_position_mode")]
+    pub position_mode: String,
 }
 
 fn default_target_lang() -> String {
@@ -57,6 +60,10 @@ fn default_translation_style() -> String {
 
 fn default_ui_opacity() -> f64 {
     0.9
+}
+
+fn default_position_mode() -> String {
+    "dynamic".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -150,6 +157,7 @@ pub fn save_last_pos(pos: Position, margins: Option<[i32; 4]>) -> Result<()> {
             background_color: None,
             background_opacity: None,
             renderer: None,
+            position_mode: default_position_mode(),
         },
         profiles: HashMap::new(),
     });

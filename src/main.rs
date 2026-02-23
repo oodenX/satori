@@ -199,7 +199,9 @@ fn run_overlay(
             .background_opacity
             .or(settings.and_then(|s| s.background_opacity)),
         image_data,
-        last_margins: settings.and_then(|s| s.last_margins),
+        last_margins: settings
+            .filter(|s| s.position_mode == "dynamic")
+            .and_then(|s| s.last_margins),
     };
 
     overlay::run(provider, overlay_config);

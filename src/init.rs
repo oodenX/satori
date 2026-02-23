@@ -227,7 +227,25 @@ pub fn run_init() -> Result<()> {
     };
     println!("  → {}\n", POSITIONS[pos_idx].1);
 
-    // 7. GTK renderer (memory optimization)
+    // 7. Position mode
+    println!("🔄 Position mode:");
+    println!("  1: Dynamic (default — remember last position between sessions)");
+    println!("  2: Fixed (reset to default position each time)");
+    print!("\nSelect position mode [default: 1]: ");
+    io::stdout().flush()?;
+    let mode_input = read_line()?;
+    let position_mode = match mode_input.trim() {
+        "2" => {
+            println!("  → Fixed position\n");
+            "fixed".to_string()
+        }
+        _ => {
+            println!("  → Dynamic position\n");
+            "dynamic".to_string()
+        }
+    };
+
+    // 8. GTK renderer (memory optimization)
     println!("🖥  GTK Renderer:");
     println!("  1: Auto (default — uses GPU via Vulkan/OpenGL)");
     println!("  2: Cairo (software — lower memory, slightly higher CPU)");
@@ -276,6 +294,7 @@ pub fn run_init() -> Result<()> {
             background_color: None,
             background_opacity: None,
             renderer,
+            position_mode,
         },
         profiles,
     };
