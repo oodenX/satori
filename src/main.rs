@@ -185,58 +185,72 @@ fn run_overlay(
         None => None, // will screenshot in overlay
     };
 
-    // Route to the appropriate GUI backend
-    let gui_backend = settings.map(|s| s.gui_backend).unwrap_or_default();
+    // Resolve backend: fall back to whatever is compiled if configured one isn't available
+    let gui_backend = resolve_backend(settings.map(|s| s.gui_backend).unwrap_or_default());
 
     match gui_backend {
-        #[cfg(feature = "gui-slint")]
         config::GuiBackend::Slint => {
-            let _ = position;
-            overlay_slint::run(provider, target_lang, style, image_data);
+            #[cfg(feature = "gui-slint")]
+            {
+                let _ = position;
+                overlay_slint::run(provider, target_lang, style, image_data);
+            }
+            #[cfg(not(feature = "gui-slint"))]
+            unreachable!();
         }
-        #[cfg(not(feature = "gui-slint"))]
-        config::GuiBackend::Slint => {
-            let _ = (image_data, position);
-            anyhow::bail!(
-                "Slint backend not compiled. Rebuild with: \
-                 cargo build --no-default-features --features gui-slint"
-            );
-        }
-        #[cfg(feature = "gui")]
         config::GuiBackend::Gtk4 => {
-            let ui_opacity = settings.map(|s| s.ui_opacity).unwrap_or(0.9);
+            #[cfg(feature = "gui")]
+            {
+                let ui_opacity = settings.map(|s| s.ui_opacity).unwrap_or(0.9);
 
-            let overlay_config = overlay::OverlayConfig {
-                target_lang,
-                translation_style: style,
-                ui_opacity,
-                position,
-                font: cli.font.or(settings.and_then(|s| s.font.clone())),
-                color: cli.color.or(settings.and_then(|s| s.color.clone())),
-                background_color: cli
-                    .background_color
-                    .or(settings.and_then(|s| s.background_color.clone())),
-                background_opacity: cli
-                    .background_opacity
-                    .or(settings.and_then(|s| s.background_opacity)),
-                image_data,
-                last_margins: settings
-                    .filter(|s| s.position_mode == "dynamic")
-                    .and_then(|s| s.last_margins),
-            };
+                let overlay_config = overlay::OverlayConfig {
+                    target_lang,
+                    translation_style: style,
+                    ui_opacity,
+                    position,
+                    font: cli.font.or(settings.and_then(|s| s.font.clone())),
+                    color: cli.color.or(settings.and_then(|s| s.color.clone())),
+                    background_color: cli
+                        .background_color
+                        .or(settings.and_then(|s| s.background_color.clone())),
+                    background_opacity: cli
+                        .background_opacity
+                        .or(settings.and_then(|s| s.background_opacity)),
+                    image_data,
+                    last_margins: settings
+                        .filter(|s| s.position_mode == "dynamic")
+                        .and_then(|s| s.last_margins),
+                };
 
-            overlay::run(provider, overlay_config);
-        }
-        #[cfg(not(feature = "gui"))]
-        config::GuiBackend::Gtk4 => {
-            anyhow::bail!(
-                "GTK4 backend not compiled. Rebuild with default features, \
-                 or set gui_backend = \"slint\" in config."
-            );
+                overlay::run(provider, overlay_config);
+            }
+            #[cfg(not(feature = "gui"))]
+            unreachable!();
         }
     }
 
     Ok(())
+}
+
+/// If the configured backend isn't compiled in, fall back to whichever IS available.
+#[cfg(any(feature = "gui", feature = "gui-slint"))]
+fn resolve_backend(configured: config::GuiBackend) -> config::GuiBackend {
+    match configured {
+        config::GuiBackend::Slint if cfg!(feature = "gui-slint") => config::GuiBackend::Slint,
+        config::GuiBackend::Gtk4 if cfg!(feature = "gui") => config::GuiBackend::Gtk4,
+        other => {
+            // Configured backend not compiled — pick what's available
+            let fallback = if cfg!(feature = "gui") {
+                config::GuiBackend::Gtk4
+            } else {
+                config::GuiBackend::Slint
+            };
+            eprintln!(
+                "Warning: gui_backend \"{other:?}\" not compiled, falling back to \"{fallback:?}\""
+            );
+            fallback
+        }
+    }
 }
 
 #[cfg(not(any(feature = "gui", feature = "gui-slint")))]
