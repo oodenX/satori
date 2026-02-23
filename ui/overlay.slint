@@ -1,0 +1,155 @@
+import { Button, VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
+
+export component SatoriOverlay inherits Window {
+    title: "Satori";
+    no-frame: true;
+    preferred-width: 380px;
+    min-width: 280px;
+    min-height: 150px;
+    background: #1e1e2e;
+
+    // Properties set from Rust
+    in property <string> source-text: "";
+    in property <string> translated-text: "";
+    in property <string> counter-text: "";
+    in property <bool> prev-enabled: false;
+    in property <bool> next-enabled: false;
+    in property <bool> screenshot-enabled: false;
+    in property <bool> copy-visible: false;
+    in property <bool> is-loading: true;
+    in property <string> error-text: "";
+
+    // Callbacks handled in Rust
+    callback prev-clicked();
+    callback next-clicked();
+    callback screenshot-clicked();
+    callback copy-clicked();
+    callback close-requested();
+    // Callbacks invoked from background translation thread via invoke_from_event_loop
+    callback translation-completed(/* source */ string, /* translated */ string);
+    callback translation-failed(/* error */ string);
+
+    // Handle Escape key
+    forward-focus: key-handler;
+    key-handler := FocusScope {
+        key-pressed(event) => {
+            if (event.text == "\u{001b}") {
+                root.close-requested();
+                accept
+            } else if (event.modifiers.control && event.text == "c") {
+                root.copy-clicked();
+                accept
+            } else {
+                reject
+            }
+        }
+    }
+
+    VerticalBox {
+        padding: 0px;
+        spacing: 0px;
+
+        // Draggable title bar
+        header := Rectangle {
+            height: 42px;
+            background: #181825;
+
+            HorizontalBox {
+                padding-left: 8px;
+                padding-right: 8px;
+                padding-top: 4px;
+                padding-bottom: 4px;
+                spacing: 4px;
+
+                btn-prev := Button {
+                    text: "◀";
+                    enabled: root.prev-enabled;
+                    clicked => { root.prev-clicked(); }
+                }
+                btn-next := Button {
+                    text: "▶";
+                    enabled: root.next-enabled;
+                    clicked => { root.next-clicked(); }
+                }
+                if root.copy-visible: Button {
+                    text: "📋";
+                    clicked => { root.copy-clicked(); }
+                }
+
+                // Spacer
+                Rectangle { }
+
+                Text {
+                    text: "Satori";
+                    color: #6c7086;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                Rectangle { }
+
+                btn-screenshot := Button {
+                    text: "📷";
+                    enabled: root.screenshot-enabled;
+                    clicked => { root.screenshot-clicked(); }
+                }
+                btn-close := Button {
+                    text: "✕";
+                    clicked => { root.close-requested(); }
+                }
+            }
+        }
+
+        // Content area
+        ScrollView {
+            VerticalBox {
+                padding: 20px;
+                spacing: 12px;
+                alignment: start;
+
+                if root.is-loading: Text {
+                    text: "Translating…";
+                    color: #a6adc8;
+                    horizontal-alignment: center;
+                    font-size: 14px;
+                }
+
+                if !root.is-loading && root.error-text != "": Text {
+                    text: root.error-text;
+                    color: #f38ba8;
+                    wrap: word-wrap;
+                    font-size: 13px;
+                }
+
+                if !root.is-loading && root.error-text == "" && root.source-text != "": Text {
+                    text: root.source-text;
+                    color: #a6adc8;
+                    font-italic: true;
+                    wrap: word-wrap;
+                    font-size: 13px;
+                }
+
+                if !root.is-loading && root.error-text == "" && root.translated-text != "": Text {
+                    text: root.translated-text;
+                    color: #cdd6f4;
+                    font-weight: 700;
+                    wrap: word-wrap;
+                    font-size: 14px;
+                }
+
+                if !root.is-loading && root.error-text == "" && root.source-text == "" && root.translated-text == "": Text {
+                    text: "No text detected in image.";
+                    color: #a6adc8;
+                    font-size: 13px;
+                }
+
+                if root.counter-text != "": Text {
+                    text: root.counter-text;
+                    color: #6c7086;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+}
