@@ -450,7 +450,7 @@ fn build_window(app: &adw::Application, config: &OverlayConfig) -> adw::Applicat
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("Satori")
-        .default_width(480)
+        .default_width(320)
         .build();
 
     window.set_opacity(config.ui_opacity);
@@ -590,12 +590,19 @@ fn setup_drag_handler(window: &adw::ApplicationWindow, position: Position) {
     let drag = gtk4::GestureDrag::new();
     drag.set_propagation_phase(gtk4::PropagationPhase::Capture);
 
-    // Track starting margins when drag begins
-    let start_margins = Rc::new(Cell::new((0i32, 0i32, 0i32, 0i32))); // top, bottom, left, right
+    // Track starting margins and window size when drag begins
+    let start_margins = Rc::new(Cell::new((0i32, 0i32, 0i32, 0i32)));
+    let start_size = Rc::new(Cell::new((0i32, 0i32)));
+    // true = moving window, false = resizing via edge
+    let is_move = Rc::new(Cell::new(true));
+
+    let edge_threshold = 12; // pixels from edge to trigger resize
 
     let window_weak = window.downgrade();
     let margins = Rc::clone(&start_margins);
-    drag.connect_drag_begin(move |_, _, _| {
+    let size = Rc::clone(&start_size);
+    let mode = Rc::clone(&is_move);
+    drag.connect_drag_begin(move |_, x, y| {
         let Some(w) = window_weak.upgrade() else {
             return;
         };
@@ -605,40 +612,57 @@ fn setup_drag_handler(window: &adw::ApplicationWindow, position: Position) {
             w.margin(Edge::Left),
             w.margin(Edge::Right),
         ));
+        let ww = w.width();
+        let wh = w.height();
+        size.set((ww, wh));
+
+        // Detect if drag started near an edge → resize mode
+        let near_right = (x as i32) > ww - edge_threshold;
+        let near_bottom = (y as i32) > wh - edge_threshold;
+        mode.set(!(near_right || near_bottom));
     });
 
     let window_weak = window.downgrade();
     let margins = Rc::clone(&start_margins);
+    let size = Rc::clone(&start_size);
+    let mode = Rc::clone(&is_move);
     let pos = position;
     drag.connect_drag_update(move |_, dx, dy| {
         let Some(w) = window_weak.upgrade() else {
             return;
         };
-        let (st, sb, sl, sr) = margins.get();
-        let dx = dx as i32;
-        let dy = dy as i32;
 
-        // Adjust margins based on which edges are anchored
-        match pos {
-            Position::TopLeft => {
-                w.set_margin(Edge::Top, (st + dy).max(0));
-                w.set_margin(Edge::Left, (sl + dx).max(0));
+        if mode.get() {
+            // Move mode — adjust margins
+            let (st, sb, sl, sr) = margins.get();
+            let dx = dx as i32;
+            let dy = dy as i32;
+
+            match pos {
+                Position::TopLeft => {
+                    w.set_margin(Edge::Top, (st + dy).max(0));
+                    w.set_margin(Edge::Left, (sl + dx).max(0));
+                }
+                Position::TopRight => {
+                    w.set_margin(Edge::Top, (st + dy).max(0));
+                    w.set_margin(Edge::Right, (sr - dx).max(0));
+                }
+                Position::BottomLeft => {
+                    w.set_margin(Edge::Bottom, (sb - dy).max(0));
+                    w.set_margin(Edge::Left, (sl + dx).max(0));
+                }
+                Position::BottomRight => {
+                    w.set_margin(Edge::Bottom, (sb - dy).max(0));
+                    w.set_margin(Edge::Right, (sr - dx).max(0));
+                }
+                Position::Center => {}
             }
-            Position::TopRight => {
-                w.set_margin(Edge::Top, (st + dy).max(0));
-                w.set_margin(Edge::Right, (sr - dx).max(0));
-            }
-            Position::BottomLeft => {
-                w.set_margin(Edge::Bottom, (sb - dy).max(0));
-                w.set_margin(Edge::Left, (sl + dx).max(0));
-            }
-            Position::BottomRight => {
-                w.set_margin(Edge::Bottom, (sb - dy).max(0));
-                w.set_margin(Edge::Right, (sr - dx).max(0));
-            }
-            Position::Center => {
-                // Center has no anchors — no drag support
-            }
+        } else {
+            // Resize mode — adjust window size
+            let (sw, sh) = size.get();
+            let new_w = (sw + dx as i32).max(280);
+            let new_h = (sh + dy as i32).max(150);
+            w.set_default_size(new_w, new_h);
         }
     });
 
@@ -677,6 +701,39 @@ fn show_spinner_in(body: &gtk4::Box) {
     body.append(&label);
 }
 
+/// Calculate adaptive window width based on text content length.
+#[cfg(feature = "gui")]
+fn adaptive_width(source: &str, translated: &str) -> i32 {
+    let max_len = source.len().max(translated.len());
+    let char_count = source.chars().count().max(translated.chars().count());
+
+    // CJK characters are roughly 2x width of latin chars
+    let effective_len = if char_count > 0 && max_len > char_count {
+        // Mostly multi-byte (CJK) — use char count with wider estimate
+        char_count
+    } else {
+        max_len
+    };
+
+    // Scale width: short text gets narrow window, long text gets wider
+    let width = match effective_len {
+        0..=30 => 320,
+        31..=80 => 400,
+        81..=200 => 500,
+        201..=500 => 600,
+        _ => 700,
+    };
+
+    // Cap at monitor width * 0.5
+    let max_w = gdk::Display::default()
+        .and_then(|d| d.monitors().item(0))
+        .and_then(|m| m.downcast::<gdk::Monitor>().ok())
+        .map(|m| (m.geometry().width() as f64 * 0.5) as i32)
+        .unwrap_or(800);
+
+    width.min(max_w).max(300)
+}
+
 #[cfg(feature = "gui")]
 fn update_display(
     body: &gtk4::Box,
@@ -690,6 +747,10 @@ fn update_display(
     clear_body(body);
 
     if let Some(entry) = entries.get(index) {
+        // Adapt window width to content
+        let w = adaptive_width(&entry.source_text, &entry.translated_text);
+        window.set_default_size(w, -1);
+
         if !entry.source_text.is_empty() {
             let label = gtk4::Label::new(None);
             label.set_wrap(true);
