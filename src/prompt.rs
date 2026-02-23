@@ -197,10 +197,10 @@ mod tests {
     #[test]
     fn parse_truncated_json() {
         // Simulates "EOF while parsing a string" — JSON cut off mid-value
-        let raw = r#"{"source_text": "hello world", "translated_text": "你好世"#;
+        let raw = r#"{"source_text": "hello world", "translated_text": "你好世界"#;
         let resp = extract_json(raw).unwrap();
         assert_eq!(resp.source_text, "hello world");
-        assert_eq!(resp.translated_text, "你好世");
+        assert_eq!(resp.translated_text, "你好世界");
     }
 
     #[test]
