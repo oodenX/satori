@@ -263,6 +263,28 @@ pub fn run_init() -> Result<()> {
         }
     };
 
+    // 9. GUI backend
+    println!("🧩 GUI Backend:");
+    println!("  1: GTK4 (default — Wayland layer-shell overlay, always-on-top)");
+    println!("  2: Slint (lightweight — regular window, lower memory)");
+    println!("     Note: Slint uses a normal window without Wayland layer-shell.");
+    println!("     The overlay won't stay above other windows automatically.");
+    print!("\nSelect GUI backend [default: 1]: ");
+    io::stdout().flush()?;
+    let backend_input = read_line()?;
+    let gui_backend = match backend_input.trim() {
+        "2" => {
+            println!(
+                "  → Slint (build with: cargo build --features gui-slint --no-default-features)\n"
+            );
+            "slint".to_string()
+        }
+        _ => {
+            println!("  → GTK4\n");
+            "gtk4".to_string()
+        }
+    };
+
     // Build config
     let profile_name = preset
         .name
@@ -295,6 +317,7 @@ pub fn run_init() -> Result<()> {
             background_opacity: None,
             renderer,
             position_mode,
+            gui_backend,
         },
         profiles,
     };
