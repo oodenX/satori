@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use anyhow::{Context, Result};
 
-use crate::config::{self, AppConfig, Profile, Settings};
+use crate::config::{self, AppConfig, GuiBackend, Profile, Settings};
 use crate::i18n;
 
 /// Provider presets for interactive selection.
@@ -277,11 +277,11 @@ pub fn run_init() -> Result<()> {
             println!(
                 "  → Slint (build with: cargo build --features gui-slint --no-default-features)\n"
             );
-            "slint".to_string()
+            GuiBackend::Slint
         }
         _ => {
             println!("  → GTK4\n");
-            "gtk4".to_string()
+            GuiBackend::Gtk4
         }
     };
 

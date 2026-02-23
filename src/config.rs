@@ -48,9 +48,18 @@ pub struct Settings {
     /// Position mode: "dynamic" (remember last position) or "fixed" (reset each time)
     #[serde(default = "default_position_mode")]
     pub position_mode: String,
-    /// GUI backend: "gtk4" (default) or "slint"
-    #[serde(default = "default_gui_backend")]
-    pub gui_backend: String,
+    /// GUI backend
+    #[serde(default)]
+    pub gui_backend: GuiBackend,
+}
+
+/// GUI framework for the overlay window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GuiBackend {
+    #[default]
+    Gtk4,
+    Slint,
 }
 
 fn default_target_lang() -> String {
@@ -67,10 +76,6 @@ fn default_ui_opacity() -> f64 {
 
 fn default_position_mode() -> String {
     "dynamic".to_string()
-}
-
-fn default_gui_backend() -> String {
-    "gtk4".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -165,7 +170,7 @@ pub fn save_last_pos(pos: Position, margins: Option<[i32; 4]>) -> Result<()> {
             background_opacity: None,
             renderer: None,
             position_mode: default_position_mode(),
-            gui_backend: default_gui_backend(),
+            gui_backend: GuiBackend::default(),
         },
         profiles: HashMap::new(),
     });
